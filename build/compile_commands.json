@@ -1,0 +1,8 @@
+[
+{
+  "directory": "C:/Users/kabaz/Documents/GitHub/PC-Final/build",
+  "command": "C:\\msys64\\mingw64\\bin\\g++.exe -DCGAL_USE_GMPXX=1 @CMakeFiles/rgbfl.dir/includes_CXX.rsp -O3 -DNDEBUG -std=gnu++17 -frounding-math -o CMakeFiles\\rgbfl.dir\\src\\main.cpp.obj -c C:\\Users\\kabaz\\Documents\\GitHub\\PC-Final\\src\\main.cpp",
+  "file": "C:/Users/kabaz/Documents/GitHub/PC-Final/src/main.cpp",
+  "output": "CMakeFiles/rgbfl.dir/src/main.cpp.obj"
+}
+]

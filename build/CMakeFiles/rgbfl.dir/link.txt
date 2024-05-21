@@ -1,0 +1,3 @@
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\rgbfl.dir/objects.a
+C:\msys64\mingw64\bin\ar.exe qc CMakeFiles\rgbfl.dir/objects.a @CMakeFiles\rgbfl.dir\objects1.rsp
+C:\msys64\mingw64\bin\g++.exe -O3 -DNDEBUG -Wl,--whole-archive CMakeFiles\rgbfl.dir/objects.a -Wl,--no-whole-archive -o rgbfl.exe -Wl,--out-implib,librgbfl.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\rgbfl.dir\linkLibs.rsp
