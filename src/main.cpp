@@ -1,114 +1,92 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <vector>
 #include <map>
+#include <string>
 #include <tuple>
+#include <Eigen/Dense>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Delaunay_triangulation_2.h>
-#include <CGAL/Interpolation_traits_2.h>
-#include <CGAL/natural_neighbor_coordinates_2.h>
-#include <CGAL/interpolation_functions.h>
-#include <thread>
-#include <future>
-#include <mutex>
-#include <sstream>
+#include <CGAL/Delaunay_triangulation_3.h>
+#include <CGAL/Cartesian.h>
 
 using namespace std;
 
 // CGAL Kernel
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Delaunay_triangulation_2<K> Delaunay_triangulation;
-typedef K::Point_2 Point;
-typedef std::map<Point, K::FT> Coord_map;
+typedef CGAL::Delaunay_triangulation_3<K> Delaunay_triangulation;
+typedef K::Point_3 Point;
 
-std::string trim_quotes(const std::string& str);
-vector<int> interpolate_color_for_color(tuple<int, int, int> FL_range, const vector<Point>& points, const vector<vector<int>>& colors);
-vector<vector<double>> readFrontLightCombinations(const string& file_path);
-map<string, Eigen::MatrixXf> readColorMeasurementData(const string& filePath);
-
-int main() {
-    string dataFilePath = "../input/data/i1_8colors_27FL_v1.csv";
-    // Read the color measurement data from the file and process Delaunay triangulation to interpolate colors
-    auto FL_pts_all = readFrontLightCombinations(dataFilePath);
-
-    cout << "FL_pts_all" << endl;
-    for (const auto& FL_pts : FL_pts_all) {
-        for (const auto& FL_pt : FL_pts) {
-            cout << FL_pt << " ";
-        }
-        cout << endl;
+// Function to read color data from a text file
+Eigen::MatrixXf readColorData(const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file " << filePath << std::endl;
+        exit(EXIT_FAILURE);
     }
 
-    map<string, Eigen::MatrixXf> colorData = readColorMeasurementData(dataFilePath);
-    cout << "Color data" << endl;
-
-    vector<string> color_list = {"red", "green", "blue", "cyan", "magenta", "yellow", "white", "black"};
-    vector<Point> points; // Define and initialize this as needed
-    vector<vector<int>> colors; // Define and initialize this as needed
-
-    cout << "Generating all possible predicted colors" << endl;
-    map<string, map<tuple<int, int, int>, vector<int>>> all_interpolated_FL;
-
-    vector<thread> threads;
-    mutex mtx; // Mutex to protect shared data
-
-    for (const auto& color : color_list) {
-        vector<tuple<int, int, int>> FL_ranges;
-        for (int FL_R = 0; FL_R < 256; FL_R += 5) {
-            for (int FL_G = 0; FL_G < 256; FL_G += 5) {
-                for (int FL_B = 0; FL_B < 256; FL_B += 5) {
-                    FL_ranges.emplace_back(FL_R, FL_G, FL_B);
-                }
-            }
-        }
-
-        threads.emplace_back([&, color, FL_ranges] {
-            for (const auto& FL_range : FL_ranges) {
-                auto interpolated_colors = interpolate_color_for_color(FL_range, points, colors);
-                lock_guard<mutex> lock(mtx);
-                all_interpolated_FL[color][FL_range] = interpolated_colors;
-            }
-        });
+    std::vector<Eigen::Vector3f> data;
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream ss(line);
+        Eigen::Vector3f point;
+        ss >> point[0] >> point[1] >> point[2];
+        data.push_back(point);
     }
 
-    for (auto& t : threads) {
-        t.join();
+    file.close();
+
+    Eigen::MatrixXf dataMatrix(data.size(), 3);
+    for (size_t i = 0; i < data.size(); ++i) {
+        dataMatrix.row(i) = data[i];
     }
 
-    return 0;
+    return dataMatrix;
 }
 
-vector<int> interpolate_color_for_color(tuple<int, int, int> FL_range, const vector<Point>& points, const vector<vector<int>>& colors) {
-    // Create a Delaunay triangulation of the input points
-    Delaunay_triangulation dt;
-    dt.insert(points.begin(), points.end());
+// Function to compute barycentric coordinates of a point within a tetrahedron
+Eigen::Vector4f compute_barycentric_coordinates(const Point& p, const Point& p0, const Point& p1, const Point& p2, const Point& p3) {
+    Eigen::Matrix4f T;
+    T << p0.x(), p1.x(), p2.x(), p3.x(),
+         p0.y(), p1.y(), p2.y(), p3.y(),
+         p0.z(), p1.z(), p2.z(), p3.z(),
+         1.0, 1.0, 1.0, 1.0;
 
-    // Convert FL_range to a Point
-    Point query_point(get<0>(FL_range), get<1>(FL_range));
+    Eigen::Vector4f rhs(p.x(), p.y(), p.z(), 1.0);
 
-    // Perform natural neighbor coordinates
-    std::vector<std::pair<Point, K::FT>> coords;
-    CGAL::Triple<std::back_insert_iterator<std::vector<std::pair<Point, K::FT>>>, K::FT, bool> result =
-        CGAL::natural_neighbor_coordinates_2(dt, query_point, std::back_inserter(coords));
+    Eigen::Vector4f bary_coords = T.colPivHouseholderQr().solve(rhs);
 
-    if (!result.third) {
+    return bary_coords;
+}
+
+// Function to interpolate color for a given FL range
+Eigen::Vector3f interpolate_color(const Eigen::MatrixXf& data, const tuple<int, int, int>& FL_range, const Delaunay_triangulation& dt) {
+    Point query_point(get<0>(FL_range), get<1>(FL_range), get<2>(FL_range));
+
+    auto cell = dt.locate(query_point);
+    if (dt.is_infinite(cell)) {
         // Handle the case where the point is not within the convex hull
-        return {};
+        return Eigen::Vector3f::Zero();
     }
 
-    // Perform interpolation using the obtained coordinates
-    vector<int> interpolated_color(3, 0);
-    K::FT sum_weights = result.second;
+    // Get the vertices of the simplex
+    Point p0 = cell->vertex(0)->point();
+    Point p1 = cell->vertex(1)->point();
+    Point p2 = cell->vertex(2)->point();
+    Point p3 = cell->vertex(3)->point();
 
-    for (const auto& coord : coords) {
-        Point p = coord.first;
-        K::FT weight = coord.second / sum_weights;
+    // Compute the barycentric coordinates of the query point within the simplex
+    Eigen::Vector4f bary_coords = compute_barycentric_coordinates(query_point, p0, p1, p2, p3);
 
-        // Find the corresponding color in the original color list
-        auto it = find(points.begin(), points.end(), p);
-        if (it != points.end()) {
-            int index = distance(points.begin(), it);
-            for (int i = 0; i < 3; ++i) {
-                interpolated_color[i] += weight * colors[index][i];
+    // Perform interpolation using the barycentric coordinates
+    Eigen::Vector3f interpolated_color = Eigen::Vector3f::Zero();
+
+    for (int i = 0; i < 4; ++i) {
+        Point p = cell->vertex(i)->point();
+        for (auto vit = dt.finite_vertices_begin(); vit != dt.finite_vertices_end(); ++vit) {
+            if (vit->point() == p) {
+                interpolated_color += bary_coords[i] * data.row(distance(dt.finite_vertices_begin(), vit)).transpose();
+                break;
             }
         }
     }
@@ -116,145 +94,41 @@ vector<int> interpolate_color_for_color(tuple<int, int, int> FL_range, const vec
     return interpolated_color;
 }
 
-vector<vector<double>> readFrontLightCombinations(const string& file_path) {
-    std::ifstream file(file_path);
-    std::vector<double> FL_red, FL_green, FL_blue;
-    
-    if (!file.is_open()) {
-        std::cerr << "Error opening file: " << file_path << std::endl;
-        return {}; // Return an empty vector if file opening fails
+int main() {
+    vector<string> color_names = {"red", "green", "blue", "cyan", "magenta", "yellow", "white", "black"};
+    map<string, Eigen::MatrixXf> color_data;
+
+    // Read data for each color
+    for (const auto& color : color_names) {
+        string filePath = "../input/data/" + color + ".txt"; // Update with actual path
+        color_data[color] = readColorData(filePath);
     }
 
-    std::string line;
-    // Skip the header line
-    std::getline(file, line);
+    // Example front lights data
+    vector<Point> front_lights = {
+        Point(0, 0, 0), Point(0, 0, 128), Point(0, 0, 255),
+        Point(0, 128, 0), Point(0, 128, 128), Point(0, 128, 255),
+        Point(0, 255, 0), Point(0, 255, 128), Point(0, 255, 255),
+        Point(128, 0, 0), Point(128, 0, 128), Point(128, 0, 255),
+        Point(128, 128, 0), Point(128, 128, 128), Point(128, 128, 255),
+        Point(128, 255, 0), Point(128, 255, 128), Point(128, 255, 255),
+        Point(255, 0, 0), Point(255, 0, 128), Point(255, 0, 255),
+        Point(255, 128, 0), Point(255, 128, 128), Point(255, 128, 255),
+        Point(255, 255, 0), Point(255, 255, 128), Point(255, 255, 255)
+    };
 
-    while (std::getline(file, line)) {
-        std::stringstream ss(line);
-        std::string cell;
-        std::vector<std::string> rowData;
+    // Prepare Delaunay triangulation
+    Delaunay_triangulation dt;
+    dt.insert(front_lights.begin(), front_lights.end());
 
-        // Extract each cell in the row
-        while (std::getline(ss, cell, ',')) {
-            rowData.push_back(cell);
-        }
+    // Example target point
+    tuple<int, int, int> target_point = make_tuple(100, 150, 200);
 
-        // Crop the quotation marks for each cell
-        for (auto& cell : rowData) {
-            if (!cell.empty() && cell.front() == '"') {
-                cell.erase(0, 1);
-            }
-            if (!cell.empty() && cell.back() == '"') {
-                cell.pop_back();
-            }
-        }
-
-        // Check for enough columns and ignore rows that don't have the expected data
-        if (rowData.size() > 3) { // Assuming FL_R, FL_G, and FL_B are the first three valid columns
-            double value;
-            for (int i = 0; i < 3; ++i) { // Only iterate over the first three values (FL_R, FL_G, FL_B)
-                std::istringstream iss(rowData[i]); // Use istringstream for conversion
-                
-                if (iss >> value) { // Try to read a double value from the string
-                    switch(i) {
-                        case 0: FL_red.push_back(value); break;
-                        case 1: FL_green.push_back(value); break;
-                        case 2: FL_blue.push_back(value); break;
-                    }
-                } else {
-                    // Handle the case where conversion fails, e.g., log an error or assign a default value
-                    std::cerr << "Conversion failed for value: " << rowData[i] << " in row: " << line << std::endl;
-                }
-            }
-        }
+    // Interpolate color for the target point
+    for (const auto& color : color_names) {
+        Eigen::Vector3f interpolated_color = interpolate_color(color_data[color], target_point, dt);
+        cout << "Interpolated color for " << color << ": " << interpolated_color.transpose() << endl;
     }
 
-    std::vector<std::vector<double>> FL_pts_all;
-    // Assuming the vectors are of equal length
-    for (size_t i = 0; i < FL_red.size(); ++i) {
-        FL_pts_all.push_back({FL_red[i], FL_green[i], FL_blue[i]});
-    }
-
-    return FL_pts_all;
-}
-
-// Function to trim quotation marks from a string
-std::string trim_quotes(const std::string& str) {
-    if (str.size() > 1 && str.front() == '"' && str.back() == '"') {
-        return str.substr(1, str.size() - 2);
-    }
-    return str;
-}
-
-// Function to read color measurement data from a CSV file
-std::map<std::string, Eigen::MatrixXf> readColorMeasurementData(const std::string& filePath) {
-    std::ifstream file(filePath);
-    if (!file.is_open()) {
-        std::cerr << "Error: Could not open the file." << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    std::string line;
-
-    std::vector<double> X, Y, Z;
-
-    // Skip the first line (header)
-    std::getline(file, line);
-
-    int line_count = 0;
-    while (std::getline(file, line)) {
-        std::istringstream ss(line);
-        std::string cell;
-        int cell_count = 0;
-
-        // Skip the first 5 columns
-        for (int i = 0; i < 5; ++i) {
-            std::getline(ss, cell, ',');
-        }
-
-        while (std::getline(ss, cell, ',')) {
-            cell = trim_quotes(cell); // Remove quotation marks
-            try {
-                if (!cell.empty()) {
-                    double value = std::stod(cell);
-
-                    int color_index = line_count / 27;
-                    int data_index = line_count % 27;
-
-                    switch (color_index) {
-                        case 0: X.push_back(value / 255.0); break;
-                        case 1: Y.push_back(value / 255.0); break;
-                        case 2: Z.push_back(value / 255.0); break;
-                    }
-                }
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid argument: " << cell << " at line " << line_count + 1 << ", cell " << cell_count << std::endl;
-            } catch (const std::out_of_range& e) {
-                std::cerr << "Out of range: " << cell << " at line " << line_count + 1 << ", cell " << cell_count << std::endl;
-            }
-            cell_count++;
-        }
-        line_count++;
-    }
-
-    file.close();
-
-    // Assuming each color has 27 data points
-    Eigen::MatrixXf data_pts(X.size(), 3);
-    for (size_t i = 0; i < X.size(); ++i) {
-        data_pts(i, 0) = X[i];
-        data_pts(i, 1) = Y[i];
-        data_pts(i, 2) = Z[i];
-    }
-
-    // Separate the data points into 8 colors
-    std::vector<std::string> color_names = {"red", "green", "blue", "cyan", "magenta", "yellow", "white", "black"};
-    std::map<std::string, Eigen::MatrixXf> color_dict;
-
-    for (size_t i = 0; i < color_names.size(); ++i) {
-        Eigen::MatrixXf color_pts = data_pts.block<27, 3>(i * 27, 0);
-        color_dict[color_names[i]] = color_pts;
-    }
-
-    return color_dict;
+    return 0;
 }
