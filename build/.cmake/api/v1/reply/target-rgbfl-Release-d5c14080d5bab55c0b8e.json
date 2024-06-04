@@ -39,7 +39,7 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 27,
+				"line" : 36,
 				"parent" : 0
 			},
 			{
@@ -95,19 +95,19 @@
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 28,
+				"line" : 37,
 				"parent" : 0
 			},
 			{
 				"command" : 7,
 				"file" : 0,
-				"line" : 23,
+				"line" : 31,
 				"parent" : 0
 			},
 			{
 				"command" : 7,
 				"file" : 0,
-				"line" : 22,
+				"line" : 30,
 				"parent" : 0
 			}
 		]
@@ -118,7 +118,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-O3 -DNDEBUG -std=gnu++17"
+					"fragment" : " -fopenmp -O3 -DNDEBUG -std=gnu++17"
 				},
 				{
 					"backtrace" : 11,
@@ -865,7 +865,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-O3 -DNDEBUG",
+				"fragment" : "-fopenmp -O3 -DNDEBUG",
 				"role" : "flags"
 			},
 			{
@@ -916,7 +916,7 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/main.cpp",
+			"path" : "src/openmp.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],

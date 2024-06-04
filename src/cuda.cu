@@ -9,8 +9,11 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Delaunay_triangulation_3.h>
 #include <CGAL/Cartesian.h>
+#include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 using namespace std;
+
 
 // CGAL Kernel
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
@@ -94,17 +97,30 @@ Eigen::Vector3f interpolate_color(const Eigen::MatrixXf& data, const tuple<int, 
     return interpolated_color;
 }
 
+// CUDA kernel for color interpolation
+__global__ void interpolate_colors_kernel(const Eigen::MatrixXf* color_data, const tuple<int, int, int>* target_points, int num_target_points, const Delaunay_triangulation dt, Eigen::Vector3f* output) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_target_points) {
+        const auto& target_point = target_points[idx];
+        for (int color_idx = 0; color_idx < 8; ++color_idx) {
+            output[idx * 8 + color_idx] = interpolate_color(color_data[color_idx], target_point, dt);
+        }
+    }
+}
+
 int main() {
     vector<string> color_names = {"red", "green", "blue", "cyan", "magenta", "yellow", "white", "black"};
     map<string, Eigen::MatrixXf> color_data;
 
     // Read data for each color
+    #pragma omp parallel for
     for (const auto& color : color_names) {
         string filePath = "../input/data/" + color + ".txt"; // Update with actual path
+        #pragma omp critical
         color_data[color] = readColorData(filePath);
     }
 
-    // Example front lights data
+    // Front lights data
     vector<Point> front_lights = {
         Point(0, 0, 0), Point(0, 0, 128), Point(0, 0, 255),
         Point(0, 128, 0), Point(0, 128, 128), Point(0, 128, 255),
@@ -121,14 +137,42 @@ int main() {
     Delaunay_triangulation dt;
     dt.insert(front_lights.begin(), front_lights.end());
 
-    // Example target point
-    tuple<int, int, int> target_point = make_tuple(100, 150, 200);
-
-    // Interpolate color for the target point
-    for (const auto& color : color_names) {
-        Eigen::Vector3f interpolated_color = interpolate_color(color_data[color], target_point, dt);
-        cout << "Interpolated color for " << color << ": " << interpolated_color.transpose() << endl;
+    // Allocate memory on the device
+    Eigen::MatrixXf* d_color_data;
+    cudaMalloc(&d_color_data, color_names.size() * sizeof(Eigen::MatrixXf));
+    for (int i = 0; i < color_names.size(); ++i) {
+        cudaMemcpy(&d_color_data[i], color_data[color_names[i]].data(), sizeof(Eigen::MatrixXf), cudaMemcpyHostToDevice);
     }
+
+    tuple<int, int, int>* d_target_points;
+    cudaMalloc(&d_target_points, target_points.size() * sizeof(tuple<int, int, int>));
+    cudaMemcpy(d_target_points, target_points.data(), target_points.size() * sizeof(tuple<int, int, int>), cudaMemcpyHostToDevice);
+
+    Eigen::Vector3f* d_output;
+    cudaMalloc(&d_output, target_points.size() * color_names.size() * sizeof(Eigen::Vector3f));
+
+    // Timer start
+    auto start = chrono::high_resolution_clock::now();
+
+    // Launch CUDA kernel
+    int blockSize = 256;
+    int numBlocks = (target_points.size() + blockSize - 1) / blockSize;
+    interpolate_colors_kernel<<<numBlocks, blockSize>>>(d_color_data, d_target_points, target_points.size(), dt, d_output);
+
+    // Copy results back to host
+    Eigen::Vector3f* h_output = new Eigen::Vector3f[target_points.size() * color_names.size()];
+    cudaMemcpy(h_output, d_output, target_points.size() * color_names.size() * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToHost);
+
+    // Timer end
+    auto end = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Time taken: " << duration.count() << " ms" << endl;
+
+    // Free device memory
+    cudaFree(d_color_data);
+    cudaFree(d_target_points);
+    cudaFree(d_output);
+    delete[] h_output;
 
     return 0;
 }
