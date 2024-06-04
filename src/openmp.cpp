@@ -144,7 +144,6 @@ int main() {
         #pragma omp parallel for
         for (const auto& color : color_names) {
             Eigen::Vector3f interpolated_color = interpolate_color(color_data[color], target_point, dt);
-            // cout << "Interpolated color for " << color << " at (" << get<0>(target_point) << ", " << get<1>(target_point) << ", " << get<2>(target_point) << "): " << interpolated_color.transpose() << endl;
         }
     }
 

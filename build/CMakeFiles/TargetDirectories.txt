@@ -1,3 +1,4 @@
-C:/Users/kabaz/Documents/GitHub/PC-Final/build/CMakeFiles/rgbfl.dir
-C:/Users/kabaz/Documents/GitHub/PC-Final/build/CMakeFiles/edit_cache.dir
-C:/Users/kabaz/Documents/GitHub/PC-Final/build/CMakeFiles/rebuild_cache.dir
+/home/kabazoka/PC-Final/build/CMakeFiles/rebuild_cache.dir
+/home/kabazoka/PC-Final/build/CMakeFiles/edit_cache.dir
+/home/kabazoka/PC-Final/build/CMakeFiles/rgbfl.dir
+/home/kabazoka/PC-Final/build/CMakeFiles/cuda_interpolation.dir

@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://github.com/CGAL/cgal/releases
+HostUrl=https://objects.githubusercontent.com/github-production-release-asset-2e65be/24677392/182863e9-69d3-4b84-8b05-75b4616d1950?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20240604%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240604T064759Z&X-Amz-Expires=300&X-Amz-Signature=e1d3bc50a190ea6eb42c6bc26f683259a10a3b1723ade9c4642e1ee1720c8e7c&X-Amz-SignedHeaders=host&actor_id=0&key_id=0&repo_id=24677392&response-content-disposition=attachment%3B%20filename%3DCGAL-5.6.1.zip&response-content-type=application%2Foctet-stream

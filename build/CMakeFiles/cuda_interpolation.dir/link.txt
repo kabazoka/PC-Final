@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcuda_interpolation.a  CMakeFiles/cuda_interpolation.dir/src/cuda_interpolation_generated_cuda_interpolation.cu.o
+/usr/bin/ranlib libcuda_interpolation.a
